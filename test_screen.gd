@@ -19,6 +19,8 @@ func _ready() -> void:
 	var factory = load(CUBISM_LOADER_FACTORY_PATH).new()
 	var loader = factory.cubism_loader(ProjectSettings.globalize_path("%sHaru.model3.json" % RES_PATH))
 	
+	var canvas_info := CubismFactory.canvas_info(loader.canvas_info())
+	
 	var json = loader.json()
 	
 	var textures: Array = _load_textures(json["file_references"]["textures"], RES_PATH)
@@ -37,16 +39,16 @@ func _ready() -> void:
 		var uvs := PoolVector2Array()
 		var indices := PoolIntArray()
 		
-#		for pos in drawable["vertex_positions"]:
-#			vertices.append(pos)
-#		for uv in drawable["vertex_uvs"]:
-#			uvs.append(uv)
-#		for index in drawable["indices"]:
-#			indices.append(index)
 		for pos in d.vertex_positions:
-			vertices.append(pos)
+			var x = pos.x * canvas_info.ppu
+			var y = pos.y * canvas_info.ppu
+			vertices.append(Vector2(x, y))
+#			vertices.append(pos)
 		for uv in d.vertex_uvs:
-			uvs.append(uv)
+			var x = uv.x * canvas_info.ppu
+			var y = uv.y * canvas_info.ppu
+			uvs.append(Vector2(x, y))
+#			uvs.append(uv)
 		for index in d.indices:
 			indices.append(index)
 		
@@ -58,7 +60,7 @@ func _ready() -> void:
 		mesh.mesh = array_mesh
 		
 		var mat := CanvasItemMaterial.new()
-		
+#		mat.blend_mode = CanvasItemMaterial.BLEND_MODE_PREMULT_ALPHA
 		
 		mesh.mesh.surface_set_material(array_mesh.get_surface_count() - 1, mat)
 		
@@ -89,6 +91,7 @@ func _load_textures(paths: Array, res_path: String) -> Array:
 		var image_texture := ImageTexture.new()
 		var image := Image.new()
 		image.load("%s%s" % [res_path, path])
+		image.expand_x2_hq2x()
 		image_texture.create_from_image(image)
 		textures.append(image_texture)
 	
