@@ -1,8 +1,8 @@
-// NOTE: Shader automatically converted from Godot Engine 3.4.2.stable's CanvasItemMaterial.
-
 shader_type canvas_item;
-render_mode unshaded;
+render_mode blend_mix;
+
+uniform sampler2D tex;
 
 void fragment() {
-	COLOR = texture(TEXTURE, UV);
+	COLOR = texture(tex, UV);
 }

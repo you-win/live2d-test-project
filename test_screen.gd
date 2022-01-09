@@ -14,7 +14,8 @@ onready var root: Node2D = $Root
 func _ready() -> void:
 	var dir := Directory.new()
 	if not dir.dir_exists(TMP_DIR):
-		dir.make_dir(TMP_DIR)
+		if dir.make_dir(TMP_DIR) != OK:
+			printerr("unable to create tmp dir, we are probably crashing")
 	
 	var factory = load(CUBISM_LOADER_FACTORY_PATH).new()
 	var loader = factory.cubism_loader(ProjectSettings.globalize_path("%sHaru.model3.json" % RES_PATH))
@@ -40,15 +41,9 @@ func _ready() -> void:
 		var indices := PoolIntArray()
 		
 		for pos in d.vertex_positions:
-			var x = pos.x * canvas_info.ppu
-			var y = pos.y * canvas_info.ppu
-			vertices.append(Vector2(x, y))
-#			vertices.append(pos)
+			vertices.append(Vector2(pos.x, -pos.y))
 		for uv in d.vertex_uvs:
-			var x = uv.x * canvas_info.ppu
-			var y = uv.y * canvas_info.ppu
-			uvs.append(Vector2(x, y))
-#			uvs.append(uv)
+			uvs.append(Vector2(uv.x, -uv.y))
 		for index in d.indices:
 			indices.append(index)
 		
@@ -67,9 +62,13 @@ func _ready() -> void:
 		mesh.texture = textures[d.texture_index]
 		root.add_child(mesh)
 		
-		mesh.z_index = d.draw_order
+		mesh.scale *= canvas_info.ppu
 		
-		ResourceSaver.save("%s/%d.tres" % [TMP_DIR, drawable["index"]], array_mesh)
+#		mesh.z_index = d.draw_order
+		mesh.z_index = d.render_order # Seems more correct than draw order
+		
+		if ResourceSaver.save("%s/%d.tres" % [TMP_DIR, drawable["index"]], array_mesh) != OK:
+			printerr("Unable to save array mesh in %s" % TMP_DIR)
 #		print("name: %s - tex: %d" % [drawable["index"], drawable["texture_index"]])
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -90,8 +89,9 @@ func _load_textures(paths: Array, res_path: String) -> Array:
 	for path in paths:
 		var image_texture := ImageTexture.new()
 		var image := Image.new()
-		image.load("%s%s" % [res_path, path])
-		image.expand_x2_hq2x()
+		if image.load("%s%s" % [res_path, path]) != OK:
+			printerr("Unable to load image %s" % path)
+			continue
 		image_texture.create_from_image(image)
 		textures.append(image_texture)
 	
