@@ -12,23 +12,17 @@ var drawables: Array
 var meshes: Array = []
 
 # debug
-var masks
+var masks = []
 
 ###############################################################################
 # Builtin functions                                                           #
 ###############################################################################
 
 func _ready() -> void:
-#	var dir := Directory.new()
-#	if not dir.dir_exists(TMP_DIR):
-#		if dir.make_dir(TMP_DIR) != OK:
-#			printerr("unable to create tmp dir, we are probably crashing")
-	
 	var factory = load(CUBISM_LOADER_FACTORY_PATH).new()
-	loader = factory.cubism_loader(ProjectSettings.globalize_path("%sHaru.model3.json" % RES_PATH))
+	loader = factory.cubism_loader(ProjectSettings.globalize_path(RES_PATH), "Haru.model3.json")
 	
 	# debug
-	
 	
 	var canvas_info := CubismFactory.canvas_info(loader.canvas_info())
 	
@@ -66,14 +60,7 @@ func _ready() -> void:
 		
 		array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, array)
 		mesh.mesh = array_mesh
-		
-#		var mat := CanvasItemMaterial.new()
-#
-#		if d.masks.empty():
-#			mat.blend_mode = CanvasItemMaterial.BLEND_MODE_PREMULT_ALPHA
-#		else:
-#			for mask in d.masks:
-#				pass
+
 		var mat := SpatialMaterial.new()
 		mat.albedo_texture = textures[d.texture_index]
 		mat.flags_transparent = true
@@ -87,7 +74,7 @@ func _ready() -> void:
 			else:
 				# Looks like this requires a stencil buffer that doesn't exist in Godot
 				pass
-		
+
 		if "BLEND_ADDITIVE" in d.constant_flags_string:
 			mat.params_blend_mode = SpatialMaterial.BLEND_MODE_ADD
 		elif "BLEND_MULTIPLICATIVE" in d.constant_flags_string:
@@ -96,43 +83,23 @@ func _ready() -> void:
 			mat.params_blend_mode = SpatialMaterial.BLEND_MODE_MIX
 		mat.albedo_color.a = d.opacity
 
-#		var mat := ShaderMaterial.new()
-#		match d.constant_flags_string:
-#			"BLEND_ADDITIVE":
-#				pass
-#			"BLEND_MULTIPLICATIVE":
-#				pass
-#			_:
-#				print("Unhandled %s" % d.constant_flags_string)
-#				pass
-		
-#		mesh.mesh.surface_set_material(array_mesh.get_surface_count() - 1, mat)
-		mesh.material_override = mat
+		mesh.set_surface_material(0, mat)
 		
 		for mask in d.masks:
-			
-			pass
+			if masks.has(mask):
+				print("%s mask exists" % mask)
+			else:
+				masks.append(mask)
+		
+		var v_material := ShaderMaterial.new()
+		var f_material := ShaderMaterial.new()
 		
 #		mesh.texture = textures[d.texture_index]
 		meshes.append(mesh)
 		root.add_child(mesh)
-		
-#		mesh.scale *= canvas_info.ppu
-		
-#		mesh.z_index = d.draw_order
-#		mesh.z_index = d.render_order # Seems more correct than draw order
-		
-#		drawable_array[d.render_order] = mesh
-		
-#		if ResourceSaver.save("%s/%d.tres" % [TMP_DIR, drawable["index"]], array_mesh) != OK:
-#			printerr("Unable to save array mesh in %s" % TMP_DIR)
-#		print("name: %s - tex: %d" % [drawable["index"], drawable["texture_index"]])
-#	for drawable_idx in drawable_array.size():
-#		var d: Spatial = drawable_array[drawable_idx]
-#		root.add_child(d)
-#		d.translate(Vector3(0, 0, -drawable_idx/drawable_array.size()))
-#	root.rotate_z(PI)
-#	root.rotate_y(PI)
+		print(drawable.index)
+	print(masks)
+	
 
 func _process(delta: float) -> void:
 	loader.update(delta)
@@ -142,6 +109,9 @@ func _process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		get_tree().quit()
+	
+#	elif event.is_action_pressed("ui_accept"):
+#		root.rotate_y(PI/4)
 
 ###############################################################################
 # Connections                                                                 #
@@ -175,6 +145,8 @@ func _draw_mesh() -> void:
 			continue
 		
 		var mat = m.mesh.surface_get_material(0)
+		
+#		print(d.dynamic_flags_string)
 		
 
 ###############################################################################
