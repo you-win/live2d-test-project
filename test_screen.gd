@@ -7,7 +7,7 @@ const CUBISM_LOADER_FACTORY_PATH: String = "res://cubism_model_factory.gdns"
 
 onready var root: Spatial = $Root
 
-var loader
+var model
 var drawables: Array
 var meshes: Array = []
 
@@ -20,17 +20,20 @@ var masks = []
 
 func _ready() -> void:
 	var factory = load(CUBISM_LOADER_FACTORY_PATH).new()
-	loader = factory.cubism_loader(ProjectSettings.globalize_path(RES_PATH), "Haru.model3.json")
+	model = factory.cubism_model(ProjectSettings.globalize_path(RES_PATH), "Haru.model3.json")
 	
 	# debug
+#	for e in model.expressions():
+#		print(JSON.print(e, "\t"))
+#	print(JSON.print(model.motions(), "\t"))
 	
-	var canvas_info := CubismFactory.canvas_info(loader.canvas_info())
+	var canvas_info := CubismFactory.canvas_info(model.canvas_info())
 	
-	var json = loader.json()
+	var json = model.json()
 	
 	var textures: Array = _load_textures(json["file_references"]["textures"], RES_PATH)
 	
-	drawables = loader.drawables()
+	drawables = model.drawables()
 #	var drawable_array: Array = []
 #	drawable_array.resize(drawables.size())
 	
@@ -102,16 +105,16 @@ func _ready() -> void:
 	
 
 func _process(delta: float) -> void:
-	loader.update(delta)
-	drawables = loader.drawables()
+	model.update(delta)
+	drawables = model.drawables()
 	_draw_mesh()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		get_tree().quit()
 	
-#	elif event.is_action_pressed("ui_accept"):
-#		root.rotate_y(PI/4)
+	elif event.is_action_pressed("ui_accept"):
+		root.rotate_y(PI/4)
 
 ###############################################################################
 # Connections                                                                 #
