@@ -13,6 +13,7 @@ var meshes: Array = []
 
 # debug
 var masks = []
+var opacities = []
 
 ###############################################################################
 # Builtin functions                                                           #
@@ -22,10 +23,14 @@ func _ready() -> void:
 	var factory = load(CUBISM_LOADER_FACTORY_PATH).new()
 	model = factory.cubism_model(ProjectSettings.globalize_path(RES_PATH), "Haru.model3.json")
 	
+	model.apply_expression("F03")
+#	model.update(1.0)
+	
 	# debug
 #	for e in model.expressions():
 #		print(JSON.print(e, "\t"))
-#	print(JSON.print(model.motions(), "\t"))
+#	print(JSON.print(model.drawable_opacities(), "\t"))
+	var parts = model.parts()
 	
 	var canvas_info := CubismFactory.canvas_info(model.canvas_info())
 	
@@ -84,10 +89,16 @@ func _ready() -> void:
 			mat.params_blend_mode = SpatialMaterial.BLEND_MODE_MUL
 		else:
 			mat.params_blend_mode = SpatialMaterial.BLEND_MODE_MIX
+		mat.vertex_color_is_srgb = true
 		mat.albedo_color.a = d.opacity
+		if mat.albedo_color.a < 0.1:
+			mesh.name = "%s_%d" % [mesh.name, d.opacity]
+			pass
+#		print(d.opacity)
 
 		mesh.set_surface_material(0, mat)
 		
+		# debug
 		for mask in d.masks:
 			if masks.has(mask):
 				print("%s mask exists" % mask)
@@ -100,9 +111,8 @@ func _ready() -> void:
 #		mesh.texture = textures[d.texture_index]
 		meshes.append(mesh)
 		root.add_child(mesh)
-		print(drawable.index)
-	print(masks)
-	
+		
+#	print(masks)
 
 func _process(delta: float) -> void:
 	model.update(delta)
