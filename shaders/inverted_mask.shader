@@ -1,6 +1,6 @@
 // https://github.com/renpy/renpy/blob/master/renpy/gl2/live2d.py#L88
 
-shader_type spatial;
+shader_type canvas_item;
 render_mode blend_mix;
 
 uniform sampler2D u_tex_0;
@@ -15,6 +15,5 @@ void vertex() {
 void fragment() {
 	vec4 color = texture(u_tex_0, UV);
 	vec4 mask = texture(u_tex_1, v_mask_coord);
-	ALBEDO = color.rgb * (1.0 - mask.a);
-	ALPHA = (1.0 - mask.a);
+	COLOR = color * (1.0 - mask.a);
 }

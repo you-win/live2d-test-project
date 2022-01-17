@@ -1,4 +1,4 @@
-shader_type spatial;
+shader_type canvas_item;
 render_mode blend_mix;
 
 uniform sampler2D u_tex_0;

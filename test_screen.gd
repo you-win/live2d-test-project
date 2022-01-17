@@ -1,11 +1,15 @@
-extends Spatial
+extends Node2D
 
 const TMP_DIR: String = "res://tmp"
-const RES_PATH: String = "res://samples/Natori/"
+
+export var model_name: String = "Haru"
+
+var res_path: String = "res://samples/%s/"
+var file_name: String = "%s.model3.json"
 
 const CUBISM_LOADER_FACTORY_PATH: String = "res://cubism_model_factory.gdns"
 
-onready var root: Spatial = $Root
+onready var root = $Root
 
 var model
 var drawables: Array
@@ -14,6 +18,10 @@ var mask_indices: Array = [] # int
 var mesh_materials: Array = [] # Materials for MeshInstances
 var textures: Array = []
 var moc
+var canvas_info
+
+# Camera control
+var is_dragging := false
 
 # debug
 var masks = []
@@ -24,29 +32,29 @@ var opacities = []
 ###############################################################################
 
 func _ready() -> void:
+	res_path = res_path % model_name
+	file_name = file_name % model_name
+	
 	var factory = load(CUBISM_LOADER_FACTORY_PATH).new()
-	model = factory.cubism_model(ProjectSettings.globalize_path(RES_PATH), "Natori.model3.json")
+	model = factory.cubism_model(ProjectSettings.globalize_path(res_path), file_name)
 	
-#	model.apply_expression("F03")
-#	model.update(1.0)
-	
-	# debug
-#	for e in model.expressions():
-#		print(JSON.print(e, "\t"))
-#	print(JSON.print(model.expressions(), "\t"))
-#	var parts = model.parts()
-#	var draw_orders = []
-#	var render_orders = []
-	
-	var canvas_info := CubismFactory.canvas_info(model.canvas_info())
+	canvas_info = CubismFactory.canvas_info(model.canvas_info())
 	
 	var json = model.json()
 	
 	moc = model.moc()
 	
-	textures = _load_textures(json["file_references"]["textures"], RES_PATH)
+	textures = _load_textures(json["file_references"]["textures"], res_path)
+	
+	# TODO debug
+	$Gui/TextureRect.texture = textures[0]
+	if textures.size() > 1:
+		$Gui/TextureRect2.texture = textures[1]
 	
 	drawables = model.drawables()
+	
+#	model.apply_expression("F03")
+#	model.update(0.1)
 
 	# Mask index prepass
 	for drawable in drawables:
@@ -65,76 +73,80 @@ func _ready() -> void:
 		
 		var d := CubismFactory.drawable(drawables[d_idx])
 		
+		print(d.constant_flags_string)
+		
 		var mesh := _create_mesh(d)
+		mesh.texture = textures[d.texture_index]
+		mesh.z_as_relative = false
+		mesh.z_index = d.render_order
+		mesh.modulate.a = d.opacity
 		
-		var mat := SpatialMaterial.new()
-		mat.albedo_texture = textures[d.texture_index]
-		mat.flags_transparent = true
-		mat.vertex_color_is_srgb = true
-		mat.params_blend_mode = SpatialMaterial.BLEND_MODE_MIX
-		mat.albedo_color.a = d.opacity
-		if d.render_order >= Material.RENDER_PRIORITY_MAX:
-			printerr("render order %d is greater than max %d" % [d.render_order, Material.RENDER_PRIORITY_MAX])
-			d.render_order = Material.RENDER_PRIORITY_MAX
-		mat.render_priority = d.render_order
-		if "BLEND_ADDITIVE" in d.constant_flags_string:
-			mat.params_blend_mode = SpatialMaterial.BLEND_MODE_ADD
-		elif "BLEND_MULTIPLICATIVE" in d.constant_flags_string:
-			mat.params_blend_mode = SpatialMaterial.BLEND_MODE_MUL
+		var mat := ShaderMaterial.new()
+		if CubismFactory.ConstantFlags.BLEND_ADDITIVE in d.constant_flags_string:
+			mat.shader = load("res://shaders/additive.shader")
+		elif CubismFactory.ConstantFlags.BLEND_MULTIPLICATIVE in d.constant_flags_string:
+			mat.shader = load("res://shaders/multiplicative.shader")
 		else:
-			mat.params_blend_mode = SpatialMaterial.BLEND_MODE_MIX
+			mat.shader = load("res://shaders/normal.shader")
 		
-		mesh.set_surface_material(0, mat)
+		mesh.mesh.surface_set_material(0, mat)
 		
 		meshes[d_idx] = mesh
 		mesh_materials[d_idx] = mat
 		
 		root.add_child(mesh)
 		
-		if not d.masks.empty():
-			for mask_idx in d.masks:
-				if mask_idx == -1:
-					continue
-				if meshes[mask_idx] != null:
-					print("mask already processed %d" % mask_idx)
-					continue
-				
-				var mask := CubismFactory.drawable(drawables[mask_idx])
-				var mask_mesh := _create_mesh(mask)
-				
-				print(d.constant_flags_string)
-				print(d.dynamic_flags_string)
-				
-				var mask_mat := ShaderMaterial.new()
-				if "IS_INVERTED_MASK" in d.constant_flags_string:
-					mask_mat.shader = load("res://shaders/inverted_mask.shader")
-				else:
-					mask_mat.shader = load("res://shaders/mask.shader")
-				
-				mask_mat.render_priority = d.render_order
-				mask_mat.set_shader_param("u_tex_0", textures[d.texture_index])
-				mask_mat.set_shader_param("u_tex_1", textures[mask.texture_index])
-				
-				mask_mesh.set_surface_material(0, mask_mat)
-				
-				meshes[mask_idx] = mask_mesh
-				mesh_materials[mask_idx] = mat
-				
-				root.add_child(mask_mesh)
-				print(mask_mesh)
+		for mask_idx in d.masks:
+			if mask_idx == -1:
+				continue
+			if meshes[mask_idx] != null:
+				print("mask already processed %d" % mask_idx)
+				continue
+			
+			var mask := CubismFactory.drawable(drawables[mask_idx])
+			print(mask.constant_flags_string)
+			var mask_mesh := _create_mesh(mask)
+			mask_mesh.z_as_relative = false
+			mask_mesh.z_index = d.render_order
+			
+			var mask_mat := ShaderMaterial.new()
+			if not "IS_INVERTED_MASK" in mask.constant_flags_string:
+				mask_mat.shader = load("res://shaders/inverted_mask.shader")
+			else:
+				mask_mat.shader = load("res://shaders/mask.shader")
+			
+			mask_mesh.texture = textures[d.texture_index]
+			mask_mat.set_shader_param("u_tex_0", textures[mask.texture_index])
+			
+			mask_mesh.mesh.surface_set_material(0, mask_mat)
+			
+			meshes[mask_idx] = mask_mesh
+			mesh_materials[mask_idx] = mask_mat
+			
+			root.add_child(mask_mesh)
+			mask_mesh.name = "Mesh_%d" % mask_idx
 
 func _process(delta: float) -> void:
 	model.update(delta)
 	drawables = model.drawables()
-#	_draw_mesh()
-#	model.apply_expression("F01")
+	_draw_mesh()
+#	model.apply_expression("F03")
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		get_tree().quit()
 	
-	elif event.is_action_pressed("ui_accept"):
-		root.rotate_y(PI/4)
+	elif event is InputEventMouseButton:
+		if event.button_index == BUTTON_WHEEL_UP:
+			$Camera.zoom += Vector2(0.4, 0.4)
+		elif event.button_index == BUTTON_WHEEL_DOWN:
+			$Camera.zoom -= Vector2(0.4, 0.4)
+		elif event.button_index == BUTTON_LEFT:
+			is_dragging = event.pressed
+	elif event is InputEventMouseMotion:
+		if is_dragging:
+			root.global_position.x += event.relative.x * 2
+			root.global_position.y += event.relative.y * 2
 
 ###############################################################################
 # Connections                                                                 #
@@ -158,8 +170,8 @@ func _load_textures(paths: Array, res_path: String) -> Array:
 	
 	return textures
 
-func _create_mesh(d: CubismFactory.Drawable) -> MeshInstance:
-	var mesh := MeshInstance.new()
+func _create_mesh(d: CubismFactory.Drawable) -> MeshInstance2D:
+	var mesh := MeshInstance2D.new()
 	var array_mesh := ArrayMesh.new()
 	
 	var array: Array = []
@@ -186,156 +198,99 @@ func _create_mesh(d: CubismFactory.Drawable) -> MeshInstance:
 	array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, array)
 	mesh.mesh = array_mesh
 	
+	mesh.scale *= canvas_info.ppu
+	
 	return mesh
 
 func _draw_mesh() -> void:
-	var visited_idx: Array = []
+	var visited_masks: Array = []
 	for drawable_idx in drawables.size():
-		if drawable_idx in visited_idx:
+		if drawable_idx in mask_indices:
 			continue
 		
 		var d := CubismFactory.drawable(drawables[drawable_idx])
-		var m: MeshInstance = meshes[drawable_idx]
+		var mesh: MeshInstance2D = meshes[drawable_idx]
 		
-		var dynamic_flags: String = d.dynamic_flags_string
-		var target: int = d.render_order
-		
-		for mask_idx in d.masks:
-#		if d.masks.size() > 0:
-			# TODO this seems weird
-#			for mask_drawable_index in moc.drawable_masks[d.render_order]:
-			if mask_idx == -1:
-				continue
-			
-			visited_idx.append(mask_idx)
-			
-			# TODO print
-#			print("mask: %s" % dynamic_flags)
-			if not CubismFactory.DynamicFlags.VERTEX_POSITIONS_CHANGED in dynamic_flags:
-				continue
-			
-			var masking_drawable = drawables[mask_idx]
-			var mask_d := CubismFactory.drawable(masking_drawable)
-			
-#			var array_mesh := ArrayMesh.new()
-			var array_mesh: ArrayMesh = meshes[mask_idx].mesh
-			var array: Array = meshes[mask_idx].mesh.surface_get_arrays(0)
-#			var mat: SpatialMaterial = array_mesh.surface_get_material(0)
-			var mat: Material = mesh_materials[mask_idx]
-			array_mesh.clear_surfaces()
-			
-			var vertices = array[Mesh.ARRAY_VERTEX]
-			var uvs = array[Mesh.ARRAY_TEX_UV]
-			var indices = array[Mesh.ARRAY_INDEX]
-			
-			for pos_idx in mask_d.vertex_positions.size():
-				vertices[pos_idx] = mask_d.vertex_positions[pos_idx]
-				vertices[pos_idx].y *= -1
-			for uv_idx in mask_d.vertex_uvs.size():
-				uvs[uv_idx] = mask_d.vertex_uvs[uv_idx]
-				uvs[uv_idx].y *= -1
-			
-			array[Mesh.ARRAY_VERTEX] = vertices
-			array[Mesh.ARRAY_TEX_UV] = uvs
-			
-			array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, array)
-			meshes[mask_idx].mesh = array_mesh
-			
-#			var mat := SpatialMaterial.new()
-			mat.albedo_texture = textures[d.texture_index]
-			mat.flags_transparent = true
-			mat.render_priority = mask_d.render_order
-			if mask_d.masks.empty():
-				mat.params_blend_mode = SpatialMaterial.BLEND_MODE_MIX
-			else:
-				if "IS_INVERTED_MASK" in mask_d.constant_flags_string:
-					# Looks like this requires a stencil buffer that doesn't exist in Godot
-					print("inverted")
-					pass
-				else:
-					# Looks like this requires a stencil buffer that doesn't exist in Godot
-					pass
-
-			if "BLEND_ADDITIVE" in mask_d.constant_flags_string:
-				mat.params_blend_mode = SpatialMaterial.BLEND_MODE_ADD
-			elif "BLEND_MULTIPLICATIVE" in mask_d.constant_flags_string:
-				mat.params_blend_mode = SpatialMaterial.BLEND_MODE_MUL
-			else:
-				mat.params_blend_mode = SpatialMaterial.BLEND_MODE_MIX
-			mat.vertex_color_is_srgb = true
-			mat.albedo_color.a = 1.0
-
-			meshes[mask_idx].set_surface_material(0, mat)
-			
-#			print(meshes[mask_idx])
-		
-		if d.opacity <= 0.0 and not "IS_VISIBLE" in dynamic_flags:
+		if d.opacity <= 0.0 or not "IS_VISIBLE" in d.dynamic_flags_string:
+			mesh.visible = false
 			continue
-#		print("reg: %s" % dynamic_flags)
+		else:
+			mesh.visible = true
+			mesh.modulate.a = d.opacity
 		
-#		var array_mesh := ArrayMesh.new()
-		var array_mesh: ArrayMesh = m.mesh
-		var array: Array = m.mesh.surface_get_arrays(0)
-#		var mat: SpatialMaterial = array_mesh.surface_get_material(0)
-		var mat: SpatialMaterial = mesh_materials[drawable_idx]
-		array_mesh.clear_surfaces()
+		var array: Array
+		if mesh.mesh.get_surface_count() > 0:
+			array = mesh.mesh.surface_get_arrays(0)
+		else:
+			array = []
+			array.resize(Mesh.ARRAY_MAX)
+		var mat: ShaderMaterial = mesh_materials[drawable_idx]
+		mesh.mesh.clear_surfaces()
 		
 		var vertices = array[Mesh.ARRAY_VERTEX]
 		var uvs = array[Mesh.ARRAY_TEX_UV]
-		var indices = array[Mesh.ARRAY_INDEX]
 		
 		for pos_idx in d.vertex_positions.size():
-#			vertices[pos_idx] = Vector2(d.vertex_positions[pos_idx].x, -d.vertex_positions[pos_idx].y)
 			vertices[pos_idx] = d.vertex_positions[pos_idx]
 			vertices[pos_idx].y *= -1
-#			vertices.append(Vector2(pos.x, -pos.y))
 		for uv_idx in d.vertex_uvs.size():
-#			uvs[uv_idx] = Vector2(d.vertex_uvs[uv_idx].x, -d.vertex_uvs[uv_idx].y)
 			uvs[uv_idx] = d.vertex_uvs[uv_idx]
 			uvs[uv_idx].y *= -1
-#			uvs.append(Vector2(uv.x, -uv.y))
-#		for index in d.indices:
-#			indices.append(index)
 		
 		array[Mesh.ARRAY_VERTEX] = vertices
 		array[Mesh.ARRAY_TEX_UV] = uvs
-#		array[Mesh.ARRAY_INDEX] = indices
 		
-		array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, array)
-		m.mesh = array_mesh
+		mesh.mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, array)
 		
-#		m.mesh = array_mesh
+		mesh.mesh.surface_set_material(0, mat)
+		mesh.modulate.a = d.opacity
 		
-#		var mat := SpatialMaterial.new()
-		mat.albedo_texture = textures[d.texture_index]
-		mat.flags_transparent = true
-		mat.render_priority = d.render_order
-		if d.masks.empty():
-			mat.params_blend_mode = SpatialMaterial.BLEND_MODE_MIX
-		else:
-			if "IS_INVERTED_MASK" in d.constant_flags_string:
-				# Looks like this requires a stencil buffer that doesn't exist in Godot
-				pass
+		for mask_idx in d.masks:
+			if mask_idx in visited_masks:
+				continue
+			visited_masks.append(mask_idx)
+			
+			if mask_idx == -1:
+				continue
+			
+			var mask := CubismFactory.drawable(drawables[mask_idx])
+			var mask_mesh: MeshInstance2D = meshes[mask_idx]
+			
+			if mask.opacity <= 0.0 or not "IS_VISIBLE" in mask.dynamic_flags_string:
+				mask_mesh.visible = false
+				continue
 			else:
-				# Looks like this requires a stencil buffer that doesn't exist in Godot
-				pass
+				mask_mesh.visible = true
+				mask_mesh.modulate.a = mask.opacity
+			
+			var mask_array: Array
+			if mask_mesh.mesh.get_surface_count() > 0:
+				mask_array = mask_mesh.mesh.surface_get_arrays(0)
+			else:
+				mask_array = []
+				mask_array.resize(Mesh.ARRAY_MAX)
+			var mask_mat: ShaderMaterial = mesh_materials[mask_idx]
+			mask_mesh.mesh.clear_surfaces()
+			
+			if not CubismFactory.DynamicFlags.VERTEX_POSITIONS_CHANGED in mask.dynamic_flags_string:
+				continue
+			
+			var mask_vertices = mask_array[Mesh.ARRAY_VERTEX]
+			var mask_uvs = mask_array[Mesh.ARRAY_TEX_UV]
+			
+			for pos_idx in mask.vertex_positions.size():
+				mask_vertices[pos_idx] = mask.vertex_positions[pos_idx]
+				mask_vertices[pos_idx].y *= -1
+			for uv_idx in mask.vertex_uvs.size():
+				mask_uvs[uv_idx] = mask.vertex_uvs[uv_idx]
+				mask_uvs[uv_idx].y *= -1
+			
+			mask_array[Mesh.ARRAY_VERTEX] = mask_vertices
+			mask_array[Mesh.ARRAY_TEX_UV] = mask_uvs
+			
+			mask_mesh.mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, mask_array)
 
-		if "BLEND_ADDITIVE" in d.constant_flags_string:
-			mat.params_blend_mode = SpatialMaterial.BLEND_MODE_ADD
-		elif "BLEND_MULTIPLICATIVE" in d.constant_flags_string:
-			mat.params_blend_mode = SpatialMaterial.BLEND_MODE_MUL
-		else:
-			mat.params_blend_mode = SpatialMaterial.BLEND_MODE_MIX
-		mat.vertex_color_is_srgb = true
-		mat.albedo_color.a = d.opacity
-#		print(d.opacity)
-
-		m.set_surface_material(0, mat)
-		
-		visited_idx.append(drawable_idx)
-		
-#		print(d.dynamic_flags_string)
-		
+			mask_mesh.mesh.surface_set_material(0, mask_mat)
 
 ###############################################################################
 # Public functions                                                            #
