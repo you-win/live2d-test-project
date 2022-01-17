@@ -11,6 +11,7 @@ var model
 var drawables: Array
 var meshes: Array = []
 var textures: Array = []
+var moc
 
 # debug
 var masks = []
@@ -39,9 +40,13 @@ func _ready() -> void:
 	
 	var json = model.json()
 	
+	moc = model.moc()
+	
 	textures = _load_textures(json["file_references"]["textures"], RES_PATH)
 	
 	drawables = model.drawables()
+	
+#	meshes.resize(drawables.size())
 	
 	for drawable in drawables:
 		var d := CubismFactory.drawable(drawable)
@@ -121,6 +126,7 @@ func _ready() -> void:
 		
 #		mesh.texture = textures[d.texture_index]
 		meshes.append(mesh)
+#		meshes[d.render_order] = mesh
 		root.add_child(mesh)
 	
 #	print(meshes)
@@ -162,43 +168,122 @@ func _load_textures(paths: Array, res_path: String) -> Array:
 	return textures
 
 func _draw_mesh() -> void:
-#	if meshes == null or meshes.size() == 0:
-#		return
-#	print("redrawing")
+	var visited_idx: Array = []
 	for drawable_idx in drawables.size():
+		if drawable_idx in visited_idx:
+			continue
+		
 		var d := CubismFactory.drawable(drawables[drawable_idx])
 		var m: MeshInstance = meshes[drawable_idx]
 		
 		var dynamic_flags: String = d.dynamic_flags_string
+		var target: int = d.render_order
+		
+		for mask_idx in d.masks:
+#		if d.masks.size() > 0:
+			# TODO this seems weird
+#			for mask_drawable_index in moc.drawable_masks[d.render_order]:
+			if mask_idx == -1:
+				continue
+			
+			visited_idx.append(mask_idx)
+			
+			# TODO print
+#			print("mask: %s" % dynamic_flags)
+			if not CubismFactory.DynamicFlags.VERTEX_POSITIONS_CHANGED in dynamic_flags:
+				continue
+			
+			var masking_drawable = drawables[mask_idx]
+			var mask_d := CubismFactory.drawable(masking_drawable)
+			
+#			var array_mesh := ArrayMesh.new()
+			var array_mesh: ArrayMesh = meshes[mask_idx].mesh
+			var array: Array = meshes[mask_idx].mesh.surface_get_arrays(0)
+			var mat: SpatialMaterial = array_mesh.surface_get_material(0)
+			array_mesh.clear_surfaces()
+			
+			var vertices = array[Mesh.ARRAY_VERTEX]
+			var uvs = array[Mesh.ARRAY_TEX_UV]
+			var indices = array[Mesh.ARRAY_INDEX]
+			
+			for pos_idx in mask_d.vertex_positions.size():
+				vertices[pos_idx] = mask_d.vertex_positions[pos_idx]
+				vertices[pos_idx].y *= -1
+			for uv_idx in mask_d.vertex_uvs.size():
+				uvs[uv_idx] = mask_d.vertex_uvs[uv_idx]
+				uvs[uv_idx].y *= -1
+			
+			array[Mesh.ARRAY_VERTEX] = vertices
+			array[Mesh.ARRAY_TEX_UV] = uvs
+			
+			array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, array)
+			meshes[mask_idx].mesh = array_mesh
+			
+#			var mat := SpatialMaterial.new()
+			mat.albedo_texture = textures[d.texture_index]
+			mat.flags_transparent = true
+			mat.render_priority = mask_d.render_order
+			if mask_d.masks.empty():
+				mat.params_blend_mode = SpatialMaterial.BLEND_MODE_MIX
+			else:
+				if "IS_INVERTED_MASK" in mask_d.constant_flags_string:
+					# Looks like this requires a stencil buffer that doesn't exist in Godot
+					print("inverted")
+					pass
+				else:
+					# Looks like this requires a stencil buffer that doesn't exist in Godot
+					pass
+
+			if "BLEND_ADDITIVE" in mask_d.constant_flags_string:
+				mat.params_blend_mode = SpatialMaterial.BLEND_MODE_ADD
+			elif "BLEND_MULTIPLICATIVE" in mask_d.constant_flags_string:
+				mat.params_blend_mode = SpatialMaterial.BLEND_MODE_MUL
+			else:
+				mat.params_blend_mode = SpatialMaterial.BLEND_MODE_MIX
+			mat.vertex_color_is_srgb = true
+			mat.albedo_color.a = 1.0
+
+			meshes[mask_idx].set_surface_material(0, mat)
+			
+#			print(meshes[mask_idx])
+		
 		if d.opacity <= 0.0 and not "IS_VISIBLE" in dynamic_flags:
 			continue
-		print(dynamic_flags)
+#		print("reg: %s" % dynamic_flags)
 		
-		var array_mesh := ArrayMesh.new()
+#		var array_mesh := ArrayMesh.new()
+		var array_mesh: ArrayMesh = m.mesh
+		var array: Array = m.mesh.surface_get_arrays(0)
+		var mat: SpatialMaterial = array_mesh.surface_get_material(0)
+		array_mesh.clear_surfaces()
 		
-		var array: Array = []
-		array.resize(Mesh.ARRAY_MAX)
+		var vertices = array[Mesh.ARRAY_VERTEX]
+		var uvs = array[Mesh.ARRAY_TEX_UV]
+		var indices = array[Mesh.ARRAY_INDEX]
 		
-		var vertices := PoolVector2Array()
-		var uvs := PoolVector2Array()
-		var indices := PoolIntArray()
-		
-		for pos in d.vertex_positions:
-			vertices.append(Vector2(pos.x, -pos.y))
-		for uv in d.vertex_uvs:
-			uvs.append(Vector2(uv.x, -uv.y))
-		for index in d.indices:
-			indices.append(index)
+		for pos_idx in d.vertex_positions.size():
+#			vertices[pos_idx] = Vector2(d.vertex_positions[pos_idx].x, -d.vertex_positions[pos_idx].y)
+			vertices[pos_idx] = d.vertex_positions[pos_idx]
+			vertices[pos_idx].y *= -1
+#			vertices.append(Vector2(pos.x, -pos.y))
+		for uv_idx in d.vertex_uvs.size():
+#			uvs[uv_idx] = Vector2(d.vertex_uvs[uv_idx].x, -d.vertex_uvs[uv_idx].y)
+			uvs[uv_idx] = d.vertex_uvs[uv_idx]
+			uvs[uv_idx].y *= -1
+#			uvs.append(Vector2(uv.x, -uv.y))
+#		for index in d.indices:
+#			indices.append(index)
 		
 		array[Mesh.ARRAY_VERTEX] = vertices
 		array[Mesh.ARRAY_TEX_UV] = uvs
-		array[Mesh.ARRAY_INDEX] = indices
+#		array[Mesh.ARRAY_INDEX] = indices
 		
 		array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, array)
-		
 		m.mesh = array_mesh
 		
-		var mat := SpatialMaterial.new()
+#		m.mesh = array_mesh
+		
+#		var mat := SpatialMaterial.new()
 		mat.albedo_texture = textures[d.texture_index]
 		mat.flags_transparent = true
 		mat.render_priority = d.render_order
@@ -223,6 +308,8 @@ func _draw_mesh() -> void:
 #		print(d.opacity)
 
 		m.set_surface_material(0, mat)
+		
+		visited_idx.append(drawable_idx)
 		
 #		print(d.dynamic_flags_string)
 		

@@ -1,5 +1,12 @@
 extends Node
 
+const DynamicFlags: Dictionary = {
+	"IS_VISIBLE": "IS_VISIBLE",
+	"VERTEX_POSITIONS_CHANGED": "VERTEX_POSITIONS_CHANGED",
+	"DRAW_ORDER_CHANGED": "DRAW_ORDER_CHANGED",
+	"RENDER_ORDER_CHANGED": "RENDER_ORDER_CHANGED"
+}
+
 func _iter_set(from: Dictionary, to):
 	for key in from.keys():
 		to.set(key, from[key])
@@ -101,6 +108,30 @@ class CanvasInfo:
 
 func canvas_info(d: Dictionary) -> CanvasInfo:
 	var r := CanvasInfo.new()
+	
+	_iter_set(d, r)
+	
+	return r
+
+class Moc:
+	var part_ids: PoolStringArray
+	var parameter_ids: PoolStringArray
+	var drawable_ids: PoolStringArray
+	
+	var param_def_val: PoolRealArray
+	var param_max_val: PoolRealArray
+	var param_min_val: PoolRealArray
+	var parameter_count: int
+	
+	var drawable_texture_indices: PoolIntArray
+	var drawable_indices: Array
+	var drawable_masks: Array
+	var drawable_vertex_counts: PoolIntArray
+	var is_masked: bool
+	var drawable_count: int
+
+func moc(d: Dictionary) -> Moc:
+	var r := Moc.new()
 	
 	_iter_set(d, r)
 	
