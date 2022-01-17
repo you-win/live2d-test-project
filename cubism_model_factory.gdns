@@ -4,5 +4,5 @@
 
 [resource]
 resource_name = "CubismLoaderFactory"
-class_name = "CubismLoaderFactory"
+class_name = "CubismModelFactory"
 library = ExtResource( 1 )

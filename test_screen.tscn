@@ -9,15 +9,41 @@ script = ExtResource( 1 )
 layer = -100
 
 [node name="Background" type="ColorRect" parent="Gui"]
+visible = false
 anchor_right = 1.0
 anchor_bottom = 1.0
+mouse_filter = 2
 color = Color( 0, 0, 0, 1 )
 __meta__ = {
 "_edit_use_anchors_": false
 }
 
-[node name="Camera2D" type="Camera2D" parent="."]
+[node name="TextureRect" type="TextureRect" parent="Gui"]
+margin_left = -14.0
+margin_top = 15.0
+margin_right = 896.0
+margin_bottom = 872.0
+mouse_filter = 2
+expand = true
+stretch_mode = 6
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="TextureRect2" type="TextureRect" parent="Gui"]
+margin_left = 782.0
+margin_top = 3.0
+margin_right = 1597.0
+margin_bottom = 930.0
+mouse_filter = 2
+expand = true
+stretch_mode = 6
+__meta__ = {
+"_edit_use_anchors_": false
+}
+
+[node name="Camera" type="Camera2D" parent="."]
 current = true
-zoom = Vector2( 4, 4 )
+zoom = Vector2( 5, 5 )
 
 [node name="Root" type="Node2D" parent="."]
